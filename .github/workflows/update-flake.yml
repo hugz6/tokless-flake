@@ -1,0 +1,70 @@
+name: Update Flake
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Run every day at midnight
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Check for updates
+        id: update
+        run: |
+          # Fetch the latest release tag from GitHub API
+          LATEST_TAG=$(curl -s https://api.github.com/repos/HoangP8/tokless/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          
+          if [ -z "$LATEST_TAG" ]; then
+            echo "Failed to fetch latest tag."
+            exit 1
+          fi
+          
+          # Remove 'v' prefix if present for our version variable
+          LATEST_VERSION=${LATEST_TAG#v}
+          
+          # Extract current version from flake.nix
+          CURRENT_VERSION=$(grep 'version = "' flake.nix | head -n 1 | sed -E 's/.*version = "([^"]+)".*/\1/')
+          
+          if [ "$LATEST_VERSION" != "$CURRENT_VERSION" ]; then
+            echo "Updating from $CURRENT_VERSION to $LATEST_VERSION"
+            
+            # Fetch the new tarball hash
+            URL="https://github.com/HoangP8/tokless/archive/refs/tags/${LATEST_TAG}.tar.gz"
+            HASH_BASE32=$(nix-prefetch-url --unpack "$URL")
+            
+            # Update flake.nix using sed
+            sed -i "s/version = \"$CURRENT_VERSION\"/version = \"$LATEST_VERSION\"/" flake.nix
+            sed -i "s/sha256 = \".*\"/sha256 = \"$HASH_BASE32\"/" flake.nix
+            
+            echo "updated=true" >> $GITHUB_OUTPUT
+            echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "Already up to date."
+            echo "updated=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.update.outputs.updated == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(flake): update tokless to ${{ steps.update.outputs.version }}"
+          title: "Update tokless to ${{ steps.update.outputs.version }}"
+          body: |
+            This PR automatically updates the tokless flake to version `${{ steps.update.outputs.version }}`.
+            
+            The `version` and `sha256` hash in `flake.nix` have been updated.
+          branch: "update-tokless-${{ steps.update.outputs.version }}"
+          delete-branch: true
