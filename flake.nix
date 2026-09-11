@@ -31,6 +31,8 @@
             postPatch = ''
               substituteInPlace internal/util/paths.go \
                 --replace-fail 'exe, err := os.Executable()' 'exe := os.Getenv("TOKLESS_WRAPPER_PATH"); var err error; if exe == "" { exe, err = os.Executable() }'
+              substituteInPlace internal/util/mcpspawn.go \
+                --replace-fail 'self, err := os.Executable()' 'self := os.Getenv("TOKLESS_WRAPPER_PATH"); var err error; if self == "" { self, err = os.Executable() }'
             '';
             
             meta = with pkgs.lib; {
