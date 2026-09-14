@@ -54,20 +54,32 @@
                 stdenv.cc.cc.lib
                 zlib
               ]);
+              # Real binaries first on PATH so tokless records them, not our wrappers.
               runScript = pkgs.writeShellScript "tokless-fhs-run" ''
                 export NPM_CONFIG_PREFIX=''${NPM_CONFIG_PREFIX:-$HOME/.npm-global}
-                export PATH=''${NPM_CONFIG_PREFIX:-$HOME/.npm-global}/bin:$PATH
-                exec ${tokless-bin}/bin/tokless "$@"
+                export PATH=$NPM_CONFIG_PREFIX/bin:$HOME/.local/bin:$PATH
+                exec "$@"
               '';
             };
+            # Tools tokless installs (npm-global, ~/.local/bin) need to be callable
+            # from the agent's shell/hooks; node-based ones must run inside the FHS env.
+            npmTool = name: pkgs.writeShellScriptBin name ''
+              exec ${fhs}/bin/tokless-fhs "''${NPM_CONFIG_PREFIX:-$HOME/.npm-global}/bin/${name}" "$@"
+            '';
           in pkgs.symlinkJoin {
             name = "tokless";
-            paths = [ fhs ];
-            buildInputs = [ pkgs.makeWrapper ];
+            paths = [
+              (npmTool "codegraph")
+              (npmTool "context-mode")
+              (pkgs.writeShellScriptBin "rtk" ''exec "$HOME/.local/bin/rtk" "$@"'')
+            ];
             postBuild = ''
-              mv $out/bin/tokless-fhs $out/bin/tokless
-              wrapProgram $out/bin/tokless \
-                --set TOKLESS_WRAPPER_PATH $out/bin/tokless
+              cat > $out/bin/tokless <<EOF
+              #!${pkgs.runtimeShell}
+              export TOKLESS_WRAPPER_PATH=$out/bin/tokless
+              exec ${fhs}/bin/tokless-fhs ${tokless-bin}/bin/tokless "\$@"
+              EOF
+              chmod +x $out/bin/tokless
             '';
             meta = tokless-bin.meta;
           }
