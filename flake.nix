@@ -10,7 +10,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        version = "0.3.2";
+        version = "1.0.13";
       in
       {
         packages.tokless = let
@@ -22,7 +22,7 @@
               owner = "HoangP8";
               repo = "tokless";
               rev = "v${version}";
-              sha256 = "0v7mj8a6p5lln2z5iqcd552njxkvszips96nljm9734ky58pjvfi";
+              sha256 = "14r1m3ql3lks1ql4fc2vpzgm6kdmhiyzn9xl88l12fg81rhvi2ml";
             };
 
             vendorHash = null;
